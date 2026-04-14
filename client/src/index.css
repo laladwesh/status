@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -16,20 +16,12 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  color: #e2e8f0;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 42%),
-    radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.08), transparent 38%),
-    #070b12;
+  color: #1f252b;
+  background: #f1f3f5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
-}
-
-.panel {
-  background: linear-gradient(160deg, rgba(17, 28, 46, 0.9), rgba(15, 23, 38, 0.82));
-  backdrop-filter: blur(8px);
 }

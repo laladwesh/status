@@ -42,7 +42,7 @@ function PublicStatusPage() {
                 status.prasadacademic.in
               </p>
               <h1 className="mt-2 text-4xl font-semibold tracking-tight text-[#111418]">
-                Prasad Status
+                Prasad Services Status
               </h1>
               <p className="mt-2 text-sm text-[#60656f]">
                 Live availability for Prasad Academic services.
@@ -50,13 +50,6 @@ function PublicStatusPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="rounded-md bg-[#6d28d9] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-white transition hover:brightness-110"
-              >
-                Subscribe to Updates
-              </button>
-
               <Link
                 to="/login"
                 className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be]"

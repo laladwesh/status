@@ -74,54 +74,60 @@ function AdminDashboardPage() {
   }, [loadDashboard]);
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="rounded-2xl border border-border bg-panel p-6 shadow-panel">
+    <main className="min-h-screen bg-[#f1f3f5] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="rounded-md border border-[#d9dde2] bg-white p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7a808a]">
                 Admin Dashboard
               </p>
-              <h1 className="mt-2 text-3xl font-semibold text-slate-100">
+              <h1 className="mt-2 text-3xl font-semibold text-[#111418]">
                 Infrastructure Monitoring
               </h1>
-              <p className="mt-2 text-sm text-muted">
+              <p className="mt-2 text-sm text-[#60656f]">
                 Signed in as {authUser?.username || "admin"}
+              </p>
+              <p className="mt-3 text-xs text-[#7a808a]">
+                Last refresh: {statusPayload.generatedAt
+                  ? new Date(statusPayload.generatedAt).toLocaleString()
+                  : "Pending"}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={loadDashboard}
+                className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be]"
+              >
+                Refresh
+              </button>
               <Link
                 to="/"
-                className="rounded-lg border border-border bg-panelSoft px-4 py-2 text-sm text-slate-100 transition hover:border-accent/40 hover:text-accent"
+                className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be]"
               >
                 Public Status Page
               </Link>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20"
+                className="rounded-md border border-[#f2b8b8] bg-[#fff1f1] px-4 py-2 text-sm font-medium text-[#be3f3f] transition hover:bg-[#ffe9e9]"
               >
                 Logout
               </button>
             </div>
           </div>
-
-          <p className="mt-4 text-xs text-muted">
-            Last refresh: {statusPayload.generatedAt
-              ? new Date(statusPayload.generatedAt).toLocaleString()
-              : "Pending"}
-          </p>
         </header>
 
         {error ? (
-          <section className="rounded-2xl border border-rose-400/40 bg-rose-500/10 p-4 text-sm text-rose-200">
+          <section className="rounded-md border border-[#f2b8b8] bg-[#fff1f1] p-4 text-sm text-[#be3f3f]">
             {error}
           </section>
         ) : null}
 
         {loading ? (
-          <section className="rounded-2xl border border-border bg-panel p-8 text-center text-muted shadow-panel">
+          <section className="rounded-md border border-[#d9dde2] bg-white p-8 text-center text-[#7a808a]">
             Loading admin data...
           </section>
         ) : null}
@@ -129,7 +135,7 @@ function AdminDashboardPage() {
         {!loading ? (
           <>
             <section className="space-y-4">
-              <h2 className="text-xl font-semibold text-slate-100">Service Status</h2>
+              <h2 className="text-2xl font-semibold text-[#1b1f24]">Service Status</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {statusPayload.services?.map((service) => (
                   <StatusCard key={service.name} service={service} />
@@ -138,32 +144,32 @@ function AdminDashboardPage() {
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-xl font-semibold text-slate-100">Server Health</h2>
+              <h2 className="text-2xl font-semibold text-[#1b1f24]">Server Health</h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <p className="text-xs uppercase tracking-wide text-muted">CPU Load (1m)</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">CPU Load (1m)</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.cpu?.loadPercentage1m ?? 0}%
                   </p>
-                  <p className="mt-1 text-xs text-muted">Cores: {health?.cpu?.cores ?? "N/A"}</p>
+                  <p className="mt-1 text-xs text-[#7a808a]">Cores: {health?.cpu?.cores ?? "N/A"}</p>
                 </article>
 
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <p className="text-xs uppercase tracking-wide text-muted">Memory Usage</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Memory Usage</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.memory?.usagePercentage ?? 0}%
                   </p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs text-[#7a808a]">
                     {formatBytes(health?.memory?.usedBytes)} / {formatBytes(health?.memory?.totalBytes)}
                   </p>
                 </article>
 
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <p className="text-xs uppercase tracking-wide text-muted">Disk Usage</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Disk Usage</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.disk?.available ? `${health.disk.usagePercentage}%` : "N/A"}
                   </p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs text-[#7a808a]">
                     {health?.disk?.available
                       ? `${formatBytes(health.disk.usedBytes)} / ${formatBytes(
                           health.disk.totalBytes
@@ -172,12 +178,12 @@ function AdminDashboardPage() {
                   </p>
                 </article>
 
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <p className="text-xs uppercase tracking-wide text-muted">Uptime</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Uptime</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.uptime?.human || "N/A"}
                   </p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs text-[#7a808a]">
                     Seconds: {health?.uptime?.seconds ?? "N/A"}
                   </p>
                 </article>
@@ -185,10 +191,10 @@ function AdminDashboardPage() {
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-xl font-semibold text-slate-100">Security Checks</h2>
+              <h2 className="text-2xl font-semibold text-[#1b1f24]">Security Checks</h2>
 
               {security?.warnings?.length ? (
-                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                <div className="rounded-md border border-[#f3d489] bg-[#fff8e7] p-4 text-sm text-[#9c6d00]">
                   {security.warnings.map((warning) => (
                     <p key={warning}>{warning}</p>
                   ))}
@@ -196,61 +202,70 @@ function AdminDashboardPage() {
               ) : null}
 
               <div className="grid gap-4 xl:grid-cols-3">
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">
                     Recent Logins
                   </h3>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="mt-4 space-y-3 text-sm text-[#3f464f]">
                     {security.recentLogins?.length ? (
                       security.recentLogins.map((login, index) => (
-                        <div key={`${login.username}-${index}`} className="rounded-lg bg-panelSoft p-3">
-                          <p className="font-medium text-slate-100">{login.username}</p>
-                          <p className="text-xs text-muted">Terminal: {login.terminal}</p>
-                          <p className="text-xs text-muted">Login: {login.loginAt}</p>
+                        <div
+                          key={`${login.username}-${index}`}
+                          className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
+                        >
+                          <p className="font-semibold text-[#1f252b]">{login.username}</p>
+                          <p className="text-xs text-[#7a808a]">Terminal: {login.terminal}</p>
+                          <p className="text-xs text-[#7a808a]">Login: {login.loginAt}</p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-muted">No login data available.</p>
+                      <p className="text-[#7a808a]">No login data available.</p>
                     )}
                   </div>
                 </article>
 
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">
                     Failed SSH Attempts
                   </h3>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="mt-4 space-y-3 text-sm text-[#3f464f]">
                     {security.failedSshAttempts?.length ? (
                       security.failedSshAttempts.map((attempt, index) => (
-                        <div key={`${attempt.ip}-${index}`} className="rounded-lg bg-panelSoft p-3">
-                          <p className="font-medium text-slate-100">{attempt.username}</p>
-                          <p className="text-xs text-muted">IP: {attempt.ip}</p>
-                          <p className="text-xs text-muted">Time: {attempt.timestamp}</p>
+                        <div
+                          key={`${attempt.ip}-${index}`}
+                          className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
+                        >
+                          <p className="font-semibold text-[#1f252b]">{attempt.username}</p>
+                          <p className="text-xs text-[#7a808a]">IP: {attempt.ip}</p>
+                          <p className="text-xs text-[#7a808a]">Time: {attempt.timestamp}</p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-muted">No failed SSH attempts found.</p>
+                      <p className="text-[#7a808a]">No failed SSH attempts found.</p>
                     )}
                   </div>
                 </article>
 
-                <article className="rounded-2xl border border-border bg-panel p-5 shadow-panel">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-100">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">
                     Top CPU Processes
                   </h3>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="mt-4 space-y-3 text-sm text-[#3f464f]">
                     {security.topProcesses?.length ? (
                       security.topProcesses.map((proc) => (
-                        <div key={proc.pid} className="rounded-lg bg-panelSoft p-3">
-                          <p className="font-medium text-slate-100">PID {proc.pid}</p>
-                          <p className="text-xs text-muted">{proc.command}</p>
-                          <p className="text-xs text-muted">
+                        <div
+                          key={proc.pid}
+                          className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
+                        >
+                          <p className="font-semibold text-[#1f252b]">PID {proc.pid}</p>
+                          <p className="text-xs text-[#7a808a]">{proc.command}</p>
+                          <p className="text-xs text-[#7a808a]">
                             CPU: {proc.cpu}% | MEM: {proc.memory}%
                           </p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-muted">No process data available.</p>
+                      <p className="text-[#7a808a]">No process data available.</p>
                     )}
                   </div>
                 </article>
