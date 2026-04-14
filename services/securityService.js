@@ -2,6 +2,19 @@ const { execFile } = require("child_process");
 
 const SAFE_LINE_REGEX = /[^\x20-\x7E]/g;
 
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const SECURITY_CACHE_TTL_MS = parsePositiveInt(process.env.SECURITY_CACHE_TTL_MS, 60000);
+
+let securityCache = {
+  data: null,
+  expiresAt: 0,
+};
+let securityFetchPromise = null;
+
 const executeSafeCommand = (command, args = []) =>
   new Promise((resolve) => {
     execFile(
@@ -168,7 +181,7 @@ const findFailedSshAttempts = async () => {
   };
 };
 
-const getSecurityReport = async () => {
+const buildSecurityReport = async () => {
   if (process.platform === "win32") {
     return {
       recentLogins: [],
@@ -206,6 +219,33 @@ const getSecurityReport = async () => {
       : [],
     warnings,
   };
+};
+
+const getSecurityReport = async () => {
+  if (securityCache.data && Date.now() < securityCache.expiresAt) {
+    return securityCache.data;
+  }
+
+  if (securityFetchPromise) {
+    return securityFetchPromise;
+  }
+
+  securityFetchPromise = (async () => {
+    const computed = await buildSecurityReport();
+
+    securityCache = {
+      data: computed,
+      expiresAt: Date.now() + SECURITY_CACHE_TTL_MS,
+    };
+
+    return computed;
+  })();
+
+  try {
+    return await securityFetchPromise;
+  } finally {
+    securityFetchPromise = null;
+  }
 };
 
 module.exports = {

@@ -20,6 +20,26 @@ const MONITORED_SERVICES = [
 const REQUEST_TIMEOUT_MS = 10000;
 const HISTORY_DAYS = 90;
 
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const STATUS_CACHE_TTL_MS = parsePositiveInt(process.env.STATUS_CACHE_TTL_MS, 15000);
+
+let latestStatusCache = {
+  data: null,
+  expiresAt: 0,
+};
+let latestStatusFetchPromise = null;
+
+const invalidateStatusCache = () => {
+  latestStatusCache = {
+    data: null,
+    expiresAt: 0,
+  };
+};
+
 const runSingleCheck = async (service) => {
   const start = Date.now();
 
@@ -50,6 +70,7 @@ const runSingleCheck = async (service) => {
 const runStatusCheck = async () => {
   const checks = await Promise.all(MONITORED_SERVICES.map(runSingleCheck));
   await Status.insertMany(checks);
+  invalidateStatusCache();
   return checks;
 };
 
@@ -196,6 +217,15 @@ const getUptimeStats = async (serviceName) => {
 };
 
 const getLatestStatuses = async () => {
+  if (latestStatusCache.data && Date.now() < latestStatusCache.expiresAt) {
+    return latestStatusCache.data;
+  }
+
+  if (latestStatusFetchPromise) {
+    return latestStatusFetchPromise;
+  }
+
+  latestStatusFetchPromise = (async () => {
   const latestStatuses = await Status.aggregate([
     { $sort: { timestamp: -1 } },
     {
@@ -238,7 +268,19 @@ const getLatestStatuses = async () => {
     })
   );
 
-  return enriched;
+    latestStatusCache = {
+      data: enriched,
+      expiresAt: Date.now() + STATUS_CACHE_TTL_MS,
+    };
+
+    return enriched;
+  })();
+
+  try {
+    return await latestStatusFetchPromise;
+  } finally {
+    latestStatusFetchPromise = null;
+  }
 };
 
 const startMonitoring = () => {

@@ -21,6 +21,22 @@ const formatBytes = (bytes) => {
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 };
 
+const formatPercent = (value) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "N/A";
+  }
+
+  return `${value}%`;
+};
+
+const formatLoad = (value) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "N/A";
+  }
+
+  return value.toFixed(2);
+};
+
 function AdminDashboardPage() {
   const navigate = useNavigate();
   const authUser = getAuthUser();
@@ -149,25 +165,37 @@ function AdminDashboardPage() {
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
                   <p className="text-xs uppercase tracking-wide text-[#7a808a]">CPU Load (1m)</p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
-                    {health?.cpu?.loadPercentage1m ?? 0}%
+                    {formatPercent(health?.cpu?.loadPercentage1m)}
                   </p>
-                  <p className="mt-1 text-xs text-[#7a808a]">Cores: {health?.cpu?.cores ?? "N/A"}</p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Cores: {health?.cpu?.cores ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Avg speed: {health?.cpu?.averageSpeedMHz ? `${health.cpu.averageSpeedMHz} MHz` : "N/A"}
+                  </p>
                 </article>
 
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
                   <p className="text-xs uppercase tracking-wide text-[#7a808a]">Memory Usage</p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
-                    {health?.memory?.usagePercentage ?? 0}%
+                    {formatPercent(health?.memory?.usagePercentage)}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     {formatBytes(health?.memory?.usedBytes)} / {formatBytes(health?.memory?.totalBytes)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {health?.memory?.swap?.available
+                      ? `Swap: ${formatBytes(health.memory.swap.usedBytes)} / ${formatBytes(
+                          health.memory.swap.totalBytes
+                        )}`
+                      : "Swap: Disabled or unavailable"}
                   </p>
                 </article>
 
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
                   <p className="text-xs uppercase tracking-wide text-[#7a808a]">Disk Usage</p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
-                    {health?.disk?.available ? `${health.disk.usagePercentage}%` : "N/A"}
+                    {health?.disk?.available ? formatPercent(health.disk.usagePercentage) : "N/A"}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     {health?.disk?.available
@@ -175,6 +203,9 @@ function AdminDashboardPage() {
                           health.disk.totalBytes
                         )}`
                       : "Disk metrics unavailable"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Mount: {health?.disk?.mountPoint || "N/A"}
                   </p>
                 </article>
 
@@ -186,6 +217,95 @@ function AdminDashboardPage() {
                   <p className="mt-1 text-xs text-[#7a808a]">
                     Seconds: {health?.uptime?.seconds ?? "N/A"}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Boot: {health?.system?.bootTimeIso
+                      ? new Date(health.system.bootTimeIso).toLocaleString()
+                      : "N/A"}
+                  </p>
+                </article>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Load Averages</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">1m</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {formatLoad(health?.cpu?.loadAverageByWindow?.oneMinute)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">5m</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {formatLoad(health?.cpu?.loadAverageByWindow?.fiveMinutes)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">15m</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {formatLoad(health?.cpu?.loadAverageByWindow?.fifteenMinutes)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-[#7a808a]">
+                    Normalized load: {formatPercent(health?.cpu?.loadPercentage1m)} (1m), {" "}
+                    {formatPercent(health?.cpu?.loadPercentage5m)} (5m), {" "}
+                    {formatPercent(health?.cpu?.loadPercentage15m)} (15m)
+                  </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">System Details</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#1f252b]">
+                    <p>
+                      <span className="text-[#7a808a]">Hostname:</span>{" "}
+                      {health?.system?.hostname || "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">Platform:</span>{" "}
+                      {health?.system?.platform || "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">Architecture:</span>{" "}
+                      {health?.system?.architecture || "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">Kernel:</span>{" "}
+                      {health?.system?.kernelRelease || "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">Timezone:</span>{" "}
+                      {health?.system?.timezone || "N/A"}
+                    </p>
+                  </div>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Node Process</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#1f252b]">
+                    <p>
+                      <span className="text-[#7a808a]">Node version:</span>{" "}
+                      {health?.system?.nodeVersion || "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">PID:</span>{" "}
+                      {health?.process?.pid ?? "N/A"}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">RSS:</span>{" "}
+                      {formatBytes(health?.process?.rssBytes)}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">Heap:</span>{" "}
+                      {formatBytes(health?.process?.heapUsedBytes)} / {" "}
+                      {formatBytes(health?.process?.heapTotalBytes)}
+                    </p>
+                    <p>
+                      <span className="text-[#7a808a]">External:</span>{" "}
+                      {formatBytes(health?.process?.externalBytes)}
+                    </p>
+                  </div>
                 </article>
               </div>
             </section>
