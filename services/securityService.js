@@ -11,18 +11,21 @@ const executeSafeCommand = (command, args = []) =>
         timeout: 5000,
         maxBuffer: 1024 * 1024,
       },
-      (error, stdout) => {
+      (error, stdout, stderr) => {
         if (error) {
           return resolve({
             ok: false,
-            output: "",
-            error: error.message,
+            output: stdout || "",
+            error: (stderr || "").trim() || error.message,
+            exitCode: typeof error.code === "number" ? error.code : null,
           });
         }
 
         return resolve({
           ok: true,
           output: stdout || "",
+          error: "",
+          exitCode: 0,
         });
       }
     );
@@ -108,6 +111,63 @@ const parseTopProcesses = (rawOutput) => {
   });
 };
 
+const findFailedSshAttempts = async () => {
+  const commandCandidates = [
+    {
+      command: "grep",
+      args: ["Failed password", "/var/log/auth.log"],
+      source: "/var/log/auth.log",
+    },
+    {
+      command: "grep",
+      args: ["Failed password", "/var/log/secure"],
+      source: "/var/log/secure",
+    },
+    {
+      command: "journalctl",
+      args: ["--no-pager", "-u", "ssh", "-n", "600"],
+      source: "journalctl ssh",
+    },
+    {
+      command: "journalctl",
+      args: ["--no-pager", "-u", "sshd", "-n", "600"],
+      source: "journalctl sshd",
+    },
+  ];
+
+  const errors = [];
+
+  for (const candidate of commandCandidates) {
+    const result = await executeSafeCommand(candidate.command, candidate.args);
+
+    if (result.ok) {
+      return {
+        attempts: parseFailedSshAttempts(result.output),
+        warning: null,
+      };
+    }
+
+    const noMatchesFound =
+      candidate.command === "grep" &&
+      result.exitCode === 1 &&
+      !(result.output || "").trim();
+
+    if (noMatchesFound) {
+      return {
+        attempts: [],
+        warning: null,
+      };
+    }
+
+    errors.push(`${candidate.source}: ${result.error}`);
+  }
+
+  return {
+    attempts: [],
+    warning: `Unable to fetch failed SSH attempts from available sources. ${errors[0] || ""}`.trim(),
+  };
+};
+
 const getSecurityReport = async () => {
   if (process.platform === "win32") {
     return {
@@ -118,9 +178,9 @@ const getSecurityReport = async () => {
     };
   }
 
-  const [lastResult, failedSshResult, topProcessesResult] = await Promise.all([
+  const [lastResult, failedSshData, topProcessesResult] = await Promise.all([
     executeSafeCommand("last", ["-a"]),
-    executeSafeCommand("grep", ["Failed password", "/var/log/auth.log"]),
+    findFailedSshAttempts(),
     executeSafeCommand("ps", ["aux", "--sort=-%cpu"]),
   ]);
 
@@ -130,8 +190,8 @@ const getSecurityReport = async () => {
     warnings.push(`Unable to fetch recent logins: ${lastResult.error}`);
   }
 
-  if (!failedSshResult.ok) {
-    warnings.push(`Unable to fetch failed SSH attempts: ${failedSshResult.error}`);
+  if (failedSshData.warning) {
+    warnings.push(failedSshData.warning);
   }
 
   if (!topProcessesResult.ok) {
@@ -140,9 +200,7 @@ const getSecurityReport = async () => {
 
   return {
     recentLogins: lastResult.ok ? parseRecentLogins(lastResult.output) : [],
-    failedSshAttempts: failedSshResult.ok
-      ? parseFailedSshAttempts(failedSshResult.output)
-      : [],
+    failedSshAttempts: failedSshData.attempts,
     topProcesses: topProcessesResult.ok
       ? parseTopProcesses(topProcessesResult.output)
       : [],

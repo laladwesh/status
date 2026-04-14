@@ -1,0 +1,69 @@
+name: Deploy Status Dashboard
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: status-dashboard-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="$HOME/status"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Repository not found at $APP_DIR"
+              echo "Clone it once manually on the server, then re-run this workflow."
+              exit 1
+            fi
+
+            cd "$APP_DIR"
+
+            echo "Pulling latest code from main..."
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
+
+            echo "Installing dependencies..."
+            npm ci
+            npm ci --prefix client
+
+            echo "Building frontend..."
+            npm run build
+
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "PM2 not found, installing..."
+              npm install -g pm2
+            fi
+
+            echo "Restarting status-dashboard process..."
+            if pm2 describe status-dashboard >/dev/null 2>&1; then
+              pm2 restart status-dashboard --update-env
+            else
+              pm2 start server.js --name status-dashboard --update-env
+            fi
+
+            pm2 save
+            pm2 status
+
+            echo "Deployment complete."
