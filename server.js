@@ -28,7 +28,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-
+//endpoints
 app.use("/api", statusRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
