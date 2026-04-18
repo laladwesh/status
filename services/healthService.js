@@ -14,6 +14,9 @@ let healthCache = {
 };
 let healthFetchPromise = null;
 
+let cpuStaticInfoCache = null;
+let cpuStaticInfoPromise = null;
+
 const executeFile = (command, args = []) =>
   new Promise((resolve) => {
     execFile(
@@ -43,6 +46,81 @@ const percentage = (usedValue, totalValue) => {
   }
 
   return Number(((usedValue / totalValue) * 100).toFixed(2));
+};
+
+const parseNumberFromText = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/(\d+(\.\d+)?)/);
+  return match ? Number(match[1]) : null;
+};
+
+const getCpuSpeedFromLscpu = async () => {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const result = await executeFile("lscpu");
+  if (!result.ok || !result.output) {
+    return null;
+  }
+
+  const lines = result.output.split("\n");
+  const candidateKeys = ["CPU MHz", "CPU max MHz", "Max MHz"];
+
+  for (const key of candidateKeys) {
+    const line = lines.find((entry) => entry.startsWith(`${key}:`));
+    if (!line) {
+      continue;
+    }
+
+    const parsed = parseNumberFromText(line.split(":")[1]);
+    if (parsed && parsed > 0) {
+      return Math.round(parsed);
+    }
+  }
+
+  return null;
+};
+
+const getCpuStaticInfo = async () => {
+  if (cpuStaticInfoCache) {
+    return cpuStaticInfoCache;
+  }
+
+  if (cpuStaticInfoPromise) {
+    return cpuStaticInfoPromise;
+  }
+
+  cpuStaticInfoPromise = (async () => {
+    const cpus = os.cpus() || [];
+    const cpuCount = cpus.length || 1;
+
+    let averageSpeedMHz =
+      cpus.length > 0
+        ? Math.round(cpus.reduce((acc, cpu) => acc + (cpu.speed || 0), 0) / cpus.length)
+        : null;
+
+    if (!averageSpeedMHz || averageSpeedMHz <= 0) {
+      averageSpeedMHz = await getCpuSpeedFromLscpu();
+    }
+
+    cpuStaticInfoCache = {
+      cores: cpuCount,
+      model: cpus[0]?.model || "Unknown",
+      averageSpeedMHz: averageSpeedMHz && averageSpeedMHz > 0 ? averageSpeedMHz : null,
+    };
+
+    return cpuStaticInfoCache;
+  })();
+
+  try {
+    return await cpuStaticInfoPromise;
+  } finally {
+    cpuStaticInfoPromise = null;
+  }
 };
 
 const getDiskUsage = async () => {
@@ -101,7 +179,7 @@ const getDiskUsage = async () => {
   }
 
   const diskParts = lines[1].trim().split(/\s+/);
-  if (diskParts.length < 5) {
+  if (diskParts.length < 6) {
     return {
       available: false,
     };
@@ -159,7 +237,8 @@ const getSwapUsage = async () => {
   const freeBytes = Number(parts[3]);
 
   return {
-    available: totalBytes > 0,
+    available: true,
+    swapEnabled: totalBytes > 0,
     totalBytes,
     usedBytes,
     freeBytes,
@@ -167,20 +246,15 @@ const getSwapUsage = async () => {
   };
 };
 
-const getCpuMetrics = () => {
-  const cpus = os.cpus() || [];
-  const cpuCount = cpus.length || 1;
+const getCpuMetrics = async () => {
+  const staticInfo = await getCpuStaticInfo();
+  const cpuCount = staticInfo.cores || 1;
   const [load1, load5, load15] = os.loadavg();
 
-  const averageSpeedMHz =
-    cpus.length > 0
-      ? Math.round(cpus.reduce((acc, cpu) => acc + cpu.speed, 0) / cpus.length)
-      : null;
-
   return {
-    cores: cpuCount,
-    model: cpus[0]?.model || "Unknown",
-    averageSpeedMHz,
+    cores: staticInfo.cores,
+    model: staticInfo.model,
+    averageSpeedMHz: staticInfo.averageSpeedMHz,
     loadAverage: [load1, load5, load15],
     loadAverageByWindow: {
       oneMinute: Number(load1.toFixed(2)),
@@ -219,8 +293,43 @@ const getSystemMetadata = () => {
   };
 };
 
+const getHealthThresholds = () => {
+  return {
+    cpuLoadPercentage: {
+      safeMax: 70,
+      warningMax: 90,
+      unit: "%",
+      label: "CPU load",
+    },
+    memoryUsagePercentage: {
+      safeMax: 75,
+      warningMax: 90,
+      unit: "%",
+      label: "Memory usage",
+    },
+    diskUsagePercentage: {
+      safeMax: 80,
+      warningMax: 92,
+      unit: "%",
+      label: "Disk usage",
+    },
+    swapUsagePercentage: {
+      safeMax: 60,
+      warningMax: 80,
+      unit: "%",
+      label: "Swap usage",
+    },
+    normalizedLoadPercentage: {
+      safeMax: 70,
+      warningMax: 90,
+      unit: "%",
+      label: "Normalized load",
+    },
+  };
+};
+
 const buildServerHealth = async () => {
-  const cpu = getCpuMetrics();
+  const cpu = await getCpuMetrics();
 
   const totalMemoryBytes = os.totalmem();
   const freeMemoryBytes = os.freemem();
@@ -245,6 +354,7 @@ const buildServerHealth = async () => {
     disk,
     process: getNodeProcessMetrics(),
     system: getSystemMetadata(),
+    thresholds: getHealthThresholds(),
   };
 };
 

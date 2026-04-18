@@ -37,6 +37,42 @@ const formatLoad = (value) => {
   return value.toFixed(2);
 };
 
+const buildSafeRangeText = (threshold) => {
+  if (!threshold) {
+    return "Safe range: N/A";
+  }
+
+  return `Safe range: 0-${threshold.safeMax}${threshold.unit}`;
+};
+
+const getMetricState = (value, threshold) => {
+  if (typeof value !== "number" || Number.isNaN(value) || !threshold) {
+    return {
+      label: "N/A",
+      className: "border-[#d4d7dc] bg-[#f4f6f8] text-[#7a808a]",
+    };
+  }
+
+  if (value <= threshold.safeMax) {
+    return {
+      label: "Safe",
+      className: "border-[#b7ebdf] bg-[#ecfbf5] text-[#168b6f]",
+    };
+  }
+
+  if (value <= threshold.warningMax) {
+    return {
+      label: "Watch",
+      className: "border-[#f3d489] bg-[#fff8e7] text-[#9c6d00]",
+    };
+  }
+
+  return {
+    label: "High",
+    className: "border-[#f2b8b8] bg-[#fff1f1] text-[#be3f3f]",
+  };
+};
+
 function AdminDashboardPage() {
   const navigate = useNavigate();
   const authUser = getAuthUser();
@@ -51,6 +87,21 @@ function AdminDashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const cpuThreshold = health?.thresholds?.cpuLoadPercentage;
+  const memoryThreshold = health?.thresholds?.memoryUsagePercentage;
+  const diskThreshold = health?.thresholds?.diskUsagePercentage;
+  const swapThreshold = health?.thresholds?.swapUsagePercentage;
+  const normalizedLoadThreshold = health?.thresholds?.normalizedLoadPercentage;
+
+  const cpuState = getMetricState(health?.cpu?.loadPercentage1m, cpuThreshold);
+  const memoryState = getMetricState(health?.memory?.usagePercentage, memoryThreshold);
+  const diskState = getMetricState(health?.disk?.usagePercentage, diskThreshold);
+  const swapState = getMetricState(health?.memory?.swap?.usagePercentage, swapThreshold);
+  const normalizedLoadState = getMetricState(
+    health?.cpu?.loadPercentage5m,
+    normalizedLoadThreshold
+  );
 
   const handleLogout = () => {
     clearAuthSession();
@@ -161,12 +212,21 @@ function AdminDashboardPage() {
 
             <section className="space-y-4">
               <h2 className="text-2xl font-semibold text-[#1b1f24]">Server Health</h2>
+              <p className="text-xs text-[#7a808a]">
+                Safe ranges are reference thresholds for quick operational review.
+              </p>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
                   <p className="text-xs uppercase tracking-wide text-[#7a808a]">CPU Load (1m)</p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {formatPercent(health?.cpu?.loadPercentage1m)}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">{buildSafeRangeText(cpuThreshold)}</p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cpuState.className}`}
+                  >
+                    {cpuState.label}
+                  </span>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     Cores: {health?.cpu?.cores ?? "N/A"}
                   </p>
@@ -180,6 +240,12 @@ function AdminDashboardPage() {
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {formatPercent(health?.memory?.usagePercentage)}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">{buildSafeRangeText(memoryThreshold)}</p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${memoryState.className}`}
+                  >
+                    {memoryState.label}
+                  </span>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     {formatBytes(health?.memory?.usedBytes)} / {formatBytes(health?.memory?.totalBytes)}
                   </p>
@@ -190,6 +256,9 @@ function AdminDashboardPage() {
                         )}`
                       : "Swap: Disabled or unavailable"}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(swapThreshold)} | Swap state: {swapState.label}
+                  </p>
                 </article>
 
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
@@ -197,6 +266,12 @@ function AdminDashboardPage() {
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.disk?.available ? formatPercent(health.disk.usagePercentage) : "N/A"}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">{buildSafeRangeText(diskThreshold)}</p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${diskState.className}`}
+                  >
+                    {diskState.label}
+                  </span>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     {health?.disk?.available
                       ? `${formatBytes(health.disk.usedBytes)} / ${formatBytes(
@@ -214,6 +289,7 @@ function AdminDashboardPage() {
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
                     {health?.uptime?.human || "N/A"}
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">Safe range: increasing and stable</p>
                   <p className="mt-1 text-xs text-[#7a808a]">
                     Seconds: {health?.uptime?.seconds ?? "N/A"}
                   </p>
@@ -253,6 +329,14 @@ function AdminDashboardPage() {
                     {formatPercent(health?.cpu?.loadPercentage5m)} (5m), {" "}
                     {formatPercent(health?.cpu?.loadPercentage15m)} (15m)
                   </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(normalizedLoadThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${normalizedLoadState.className}`}
+                  >
+                    {normalizedLoadState.label}
+                  </span>
                 </article>
 
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
