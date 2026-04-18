@@ -130,9 +130,14 @@ function AdminDashboardPage() {
   const databaseState = getMetricState(health?.database?.pingMs, databasePingThreshold);
 
   const oneMinuteTraffic = analytics?.traffic?.oneMinute;
-  const fiveMinuteTraffic = analytics?.traffic?.fiveMinutes;
+  const monitoredServices = analytics?.monitoredServices;
+  const oneMinuteMonitoredChecks = monitoredServices?.oneMinute;
+  const fiveMinuteMonitoredChecks = monitoredServices?.fiveMinutes;
+  const monitoredApps = monitoredServices?.services || [];
+  const monitoredAppsUpCount = monitoredApps.filter(
+    (service) => service.latestStatus === "UP"
+  ).length;
   const eventLoop = analytics?.eventLoop;
-  const topEndpoints = analytics?.topEndpoints || [];
   const slowRequests = analytics?.slowRequests || [];
 
   const errorRateState = getMetricState(
@@ -475,23 +480,25 @@ function AdminDashboardPage() {
             <section className="space-y-4">
               <h2 className="text-2xl font-semibold text-[#1b1f24]">Application Analytics</h2>
               <p className="text-xs text-[#7a808a]">
-                In-process request metrics with bounded memory and cached responses.
+                Includes dashboard API traffic and monitor checks for the three public applications.
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
-                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Requests / Second (1m)</p>
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">
+                    Checks / Second ({monitoredServices?.count ?? 0} Apps)
+                  </p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
-                    {formatNumber(oneMinuteTraffic?.requestsPerSecond, 3)}
+                    {formatNumber(oneMinuteMonitoredChecks?.checksPerSecond, 3)}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
-                    1m requests: {oneMinuteTraffic?.requests ?? "N/A"}
+                    1m checks: {oneMinuteMonitoredChecks?.checks ?? "N/A"}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
-                    5m requests: {fiveMinuteTraffic?.requests ?? "N/A"}
+                    5m checks: {fiveMinuteMonitoredChecks?.checks ?? "N/A"}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
-                    Since start: {analytics?.traffic?.totalRequestsSinceStart ?? "N/A"}
+                    UP now: {monitoredAppsUpCount}/{monitoredServices?.count ?? "N/A"}
                   </p>
                 </article>
 
@@ -591,27 +598,32 @@ function AdminDashboardPage() {
                 </article>
 
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
-                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Top Endpoints (5m)</p>
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Monitored Applications (5m)</p>
                   <div className="mt-3 space-y-2 text-sm text-[#3f464f]">
-                    {topEndpoints.length ? (
-                      topEndpoints.slice(0, 6).map((endpoint) => (
+                    {monitoredApps.length ? (
+                      monitoredApps.map((service) => (
                         <div
-                          key={`${endpoint.method}-${endpoint.path}`}
+                          key={service.name}
                           className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
                         >
                           <p className="font-semibold text-[#1f252b]">
-                            {endpoint.method} {endpoint.path}
+                            {service.name}
                           </p>
                           <p className="text-xs text-[#7a808a]">
-                            Requests: {endpoint.requests} | Avg: {formatMilliseconds(endpoint.averageLatencyMs)}
+                            Status: {service.latestStatus} | Checks: {service.checksInLast5Minutes}
                           </p>
                           <p className="text-xs text-[#7a808a]">
-                            Error rate: {formatRate(endpoint.errorRatePercentage)} | Slow: {endpoint.slowRequests}
+                            Availability: {formatRate(service.availabilityPercentageLast5Minutes)} | Avg latency: {formatMilliseconds(service.averageLatencyMsLast5Minutes)}
+                          </p>
+                          <p className="text-xs text-[#7a808a]">
+                            Last check: {service.latestCheckedAt
+                              ? new Date(service.latestCheckedAt).toLocaleString()
+                              : "N/A"}
                           </p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-[#7a808a]">No endpoint data available yet.</p>
+                      <p className="text-[#7a808a]">No monitored app data available yet.</p>
                     )}
                   </div>
                 </article>

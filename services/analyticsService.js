@@ -1,4 +1,6 @@
 const { monitorEventLoopDelay } = require("perf_hooks");
+const Status = require("../models/Status");
+const { MONITORED_SERVICES } = require("./monitorService");
 
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number(value);
@@ -404,6 +406,173 @@ const getRecentWindows = (count) => {
   return minuteWindows.slice(-Math.max(1, Math.min(count, minuteWindows.length)));
 };
 
+const toRoundedNumber = (value, digits = 2) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+
+  return Number(value.toFixed(digits));
+};
+
+const getWindowServiceMetricsByName = async (serviceNames, startDate) => {
+  const rows = await Status.aggregate([
+    {
+      $match: {
+        name: { $in: serviceNames },
+        timestamp: { $gte: startDate },
+      },
+    },
+    {
+      $group: {
+        _id: "$name",
+        checks: { $sum: 1 },
+        upChecks: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "UP"] }, 1, 0],
+          },
+        },
+        downChecks: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "DOWN"] }, 1, 0],
+          },
+        },
+        averageLatencyMs: { $avg: "$latency" },
+      },
+    },
+  ]);
+
+  return rows.reduce((acc, row) => {
+    acc[row._id] = {
+      checks: row.checks || 0,
+      upChecks: row.upChecks || 0,
+      downChecks: row.downChecks || 0,
+      averageLatencyMs: toRoundedNumber(row.averageLatencyMs),
+    };
+    return acc;
+  }, {});
+};
+
+const buildWindowServiceSummary = (serviceWindowByName, minutes) => {
+  const defaultMetric = {
+    checks: 0,
+    upChecks: 0,
+    downChecks: 0,
+    averageLatencyMs: null,
+  };
+
+  const services = MONITORED_SERVICES.map((service) => {
+    const metric = serviceWindowByName[service.name] || defaultMetric;
+    return {
+      name: service.name,
+      url: service.url,
+      checks: metric.checks,
+      upChecks: metric.upChecks,
+      downChecks: metric.downChecks,
+      availabilityPercentage:
+        metric.checks > 0
+          ? toRoundedNumber((metric.upChecks / metric.checks) * 100)
+          : null,
+      averageLatencyMs: metric.averageLatencyMs,
+    };
+  });
+
+  const totalChecks = services.reduce((sum, service) => sum + service.checks, 0);
+  const totalUpChecks = services.reduce((sum, service) => sum + service.upChecks, 0);
+  const totalDownChecks = services.reduce((sum, service) => sum + service.downChecks, 0);
+
+  return {
+    minutes,
+    checks: totalChecks,
+    checksPerMinute: toRoundedNumber(totalChecks / minutes),
+    checksPerSecond: toRoundedNumber(totalChecks / (minutes * 60), 3),
+    expectedChecks: MONITORED_SERVICES.length * minutes,
+    upChecks: totalUpChecks,
+    downChecks: totalDownChecks,
+    availabilityPercentage:
+      totalChecks > 0 ? toRoundedNumber((totalUpChecks / totalChecks) * 100) : null,
+    services,
+  };
+};
+
+const getLatestServiceSnapshotByName = async (serviceNames) => {
+  const rows = await Status.aggregate([
+    {
+      $match: {
+        name: { $in: serviceNames },
+      },
+    },
+    {
+      $sort: {
+        timestamp: -1,
+      },
+    },
+    {
+      $group: {
+        _id: "$name",
+        status: { $first: "$status" },
+        latencyMs: { $first: "$latency" },
+        checkedAt: { $first: "$timestamp" },
+      },
+    },
+  ]);
+
+  return rows.reduce((acc, row) => {
+    acc[row._id] = {
+      status: row.status || "UNKNOWN",
+      latencyMs: typeof row.latencyMs === "number" ? row.latencyMs : null,
+      checkedAt: row.checkedAt ? row.checkedAt.toISOString() : null,
+    };
+    return acc;
+  }, {});
+};
+
+const getMonitoredServiceAnalytics = async () => {
+  const serviceNames = MONITORED_SERVICES.map((service) => service.name);
+  const now = Date.now();
+
+  const [oneMinuteWindowByName, fiveMinuteWindowByName, latestByName] = await Promise.all([
+    getWindowServiceMetricsByName(serviceNames, new Date(now - 60 * 1000)),
+    getWindowServiceMetricsByName(serviceNames, new Date(now - 5 * 60 * 1000)),
+    getLatestServiceSnapshotByName(serviceNames),
+  ]);
+
+  const oneMinute = buildWindowServiceSummary(oneMinuteWindowByName, 1);
+  const fiveMinutes = buildWindowServiceSummary(fiveMinuteWindowByName, 5);
+
+  const services = MONITORED_SERVICES.map((service) => {
+    const latest = latestByName[service.name] || {
+      status: "UNKNOWN",
+      latencyMs: null,
+      checkedAt: null,
+    };
+
+    const fiveMinuteServiceSummary =
+      fiveMinutes.services.find((item) => item.name === service.name) || null;
+
+    return {
+      name: service.name,
+      url: service.url,
+      latestStatus: latest.status,
+      latestLatencyMs: latest.latencyMs,
+      latestCheckedAt: latest.checkedAt,
+      checksInLast5Minutes: fiveMinuteServiceSummary ? fiveMinuteServiceSummary.checks : 0,
+      availabilityPercentageLast5Minutes: fiveMinuteServiceSummary
+        ? fiveMinuteServiceSummary.availabilityPercentage
+        : null,
+      averageLatencyMsLast5Minutes: fiveMinuteServiceSummary
+        ? fiveMinuteServiceSummary.averageLatencyMs
+        : null,
+    };
+  });
+
+  return {
+    count: MONITORED_SERVICES.length,
+    oneMinute,
+    fiveMinutes,
+    services,
+  };
+};
+
 const getApplicationAnalytics = async () => {
   if (analyticsCache.data && Date.now() < analyticsCache.expiresAt) {
     return analyticsCache.data;
@@ -417,8 +586,11 @@ const getApplicationAnalytics = async () => {
     const oneMinuteWindows = getRecentWindows(1);
     const fiveMinuteWindows = getRecentWindows(5);
 
-    const oneMinuteAnalytics = buildWindowAnalytics(oneMinuteWindows, 1);
-    const fiveMinuteAnalytics = buildWindowAnalytics(fiveMinuteWindows, 5);
+    const [oneMinuteAnalytics, fiveMinuteAnalytics, monitoredServices] = await Promise.all([
+      buildWindowAnalytics(oneMinuteWindows, 1),
+      buildWindowAnalytics(fiveMinuteWindows, 5),
+      getMonitoredServiceAnalytics(),
+    ]);
 
     const analyticsPayload = {
       generatedAt: new Date().toISOString(),
@@ -432,6 +604,7 @@ const getApplicationAnalytics = async () => {
         oneMinute: oneMinuteAnalytics,
         fiveMinutes: fiveMinuteAnalytics,
       },
+      monitoredServices,
       eventLoop: eventLoopSnapshot,
       slowRequests: [...slowRequests].reverse().slice(0, 20),
       topEndpoints: buildTopEndpoints(fiveMinuteAnalytics.endpointAggregate),
