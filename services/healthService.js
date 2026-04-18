@@ -1,4 +1,5 @@
 const os = require("os");
+const mongoose = require("mongoose");
 const { execFile } = require("child_process");
 
 const parsePositiveInt = (value, fallback) => {
@@ -16,6 +17,13 @@ let healthFetchPromise = null;
 
 let cpuStaticInfoCache = null;
 let cpuStaticInfoPromise = null;
+
+const MONGOOSE_READY_STATE_LABELS = {
+  0: "disconnected",
+  1: "connected",
+  2: "connecting",
+  3: "disconnecting",
+};
 
 const executeFile = (command, args = []) =>
   new Promise((resolve) => {
@@ -293,6 +301,42 @@ const getSystemMetadata = () => {
   };
 };
 
+const getDatabaseHealth = async () => {
+  const readyState = mongoose.connection.readyState;
+  const stateLabel = MONGOOSE_READY_STATE_LABELS[readyState] || "unknown";
+
+  if (readyState !== 1 || !mongoose.connection.db) {
+    return {
+      connected: false,
+      readyState,
+      state: stateLabel,
+      pingMs: null,
+      error: readyState === 1 ? "Database handle unavailable." : null,
+    };
+  }
+
+  const pingStart = Date.now();
+
+  try {
+    await mongoose.connection.db.admin().ping();
+    return {
+      connected: true,
+      readyState,
+      state: stateLabel,
+      pingMs: Date.now() - pingStart,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      connected: false,
+      readyState,
+      state: stateLabel,
+      pingMs: null,
+      error: error.message,
+    };
+  }
+};
+
 const getHealthThresholds = () => {
   return {
     cpuLoadPercentage: {
@@ -325,6 +369,12 @@ const getHealthThresholds = () => {
       unit: "%",
       label: "Normalized load",
     },
+    databasePingMs: {
+      safeMax: 50,
+      warningMax: 150,
+      unit: "ms",
+      label: "Database ping",
+    },
   };
 };
 
@@ -335,7 +385,11 @@ const buildServerHealth = async () => {
   const freeMemoryBytes = os.freemem();
   const usedMemoryBytes = totalMemoryBytes - freeMemoryBytes;
 
-  const [disk, swap] = await Promise.all([getDiskUsage(), getSwapUsage()]);
+  const [disk, swap, database] = await Promise.all([
+    getDiskUsage(),
+    getSwapUsage(),
+    getDatabaseHealth(),
+  ]);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -354,6 +408,7 @@ const buildServerHealth = async () => {
     disk,
     process: getNodeProcessMetrics(),
     system: getSystemMetadata(),
+    database,
     thresholds: getHealthThresholds(),
   };
 };
