@@ -37,6 +37,24 @@ const formatLoad = (value) => {
   return value.toFixed(2);
 };
 
+const formatNumber = (value, fractionDigits = 2) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "N/A";
+  }
+
+  return value.toFixed(fractionDigits);
+};
+
+const formatMilliseconds = (value) => {
+  const formatted = formatNumber(value, 2);
+  return formatted === "N/A" ? "N/A" : `${formatted} ms`;
+};
+
+const formatRate = (value) => {
+  const formatted = formatNumber(value, 2);
+  return formatted === "N/A" ? "N/A" : `${formatted}%`;
+};
+
 const buildSafeRangeText = (threshold) => {
   if (!threshold) {
     return "Safe range: N/A";
@@ -79,6 +97,7 @@ function AdminDashboardPage() {
 
   const [statusPayload, setStatusPayload] = useState({ services: [], generatedAt: null });
   const [health, setHealth] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [security, setSecurity] = useState({
     recentLogins: [],
     failedSshAttempts: [],
@@ -93,6 +112,12 @@ function AdminDashboardPage() {
   const diskThreshold = health?.thresholds?.diskUsagePercentage;
   const swapThreshold = health?.thresholds?.swapUsagePercentage;
   const normalizedLoadThreshold = health?.thresholds?.normalizedLoadPercentage;
+  const databasePingThreshold = health?.thresholds?.databasePingMs;
+
+  const analyticsErrorRateThreshold = analytics?.thresholds?.errorRatePercentage;
+  const analyticsLatencyThreshold = analytics?.thresholds?.latencyP95Ms;
+  const analyticsEventLoopThreshold = analytics?.thresholds?.eventLoopLagMs;
+  const analyticsSlowRequestThreshold = analytics?.thresholds?.slowRequestDurationMs;
 
   const cpuState = getMetricState(health?.cpu?.loadPercentage1m, cpuThreshold);
   const memoryState = getMetricState(health?.memory?.usagePercentage, memoryThreshold);
@@ -102,6 +127,29 @@ function AdminDashboardPage() {
     health?.cpu?.loadPercentage5m,
     normalizedLoadThreshold
   );
+  const databaseState = getMetricState(health?.database?.pingMs, databasePingThreshold);
+
+  const oneMinuteTraffic = analytics?.traffic?.oneMinute;
+  const fiveMinuteTraffic = analytics?.traffic?.fiveMinutes;
+  const eventLoop = analytics?.eventLoop;
+  const topEndpoints = analytics?.topEndpoints || [];
+  const slowRequests = analytics?.slowRequests || [];
+
+  const errorRateState = getMetricState(
+    oneMinuteTraffic?.errorRatePercentage,
+    analyticsErrorRateThreshold
+  );
+  const latencyP95State = getMetricState(
+    oneMinuteTraffic?.latencyPercentiles?.p95Ms,
+    analyticsLatencyThreshold
+  );
+  const eventLoopState = getMetricState(eventLoop?.p95Ms, analyticsEventLoopThreshold);
+
+  const latestSlowRequestDurationMs = slowRequests[0]?.durationMs;
+  const slowRequestState = getMetricState(
+    latestSlowRequestDurationMs,
+    analyticsSlowRequestThreshold
+  );
 
   const handleLogout = () => {
     clearAuthSession();
@@ -110,14 +158,16 @@ function AdminDashboardPage() {
 
   const loadDashboard = useCallback(async () => {
     try {
-      const [statusResponse, healthResponse, securityResponse] = await Promise.all([
+      const [statusResponse, healthResponse, analyticsResponse, securityResponse] = await Promise.all([
         apiClient.get("/status"),
         apiClient.get("/admin/health"),
+        apiClient.get("/admin/analytics"),
         apiClient.get("/admin/security"),
       ]);
 
       setStatusPayload(statusResponse.data);
       setHealth(healthResponse.data);
+      setAnalytics(analyticsResponse.data);
       setSecurity(securityResponse.data);
       setError("");
     } catch (err) {
@@ -158,6 +208,11 @@ function AdminDashboardPage() {
               <p className="mt-3 text-xs text-[#7a808a]">
                 Last refresh: {statusPayload.generatedAt
                   ? new Date(statusPayload.generatedAt).toLocaleString()
+                  : "Pending"}
+              </p>
+              <p className="mt-1 text-xs text-[#7a808a]">
+                Analytics sample: {analytics?.generatedAt
+                  ? new Date(analytics.generatedAt).toLocaleString()
                   : "Pending"}
               </p>
             </div>
@@ -215,7 +270,7 @@ function AdminDashboardPage() {
               <p className="text-xs text-[#7a808a]">
                 Safe ranges are reference thresholds for quick operational review.
               </p>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <article className="rounded-md border border-[#d9dde2] bg-white p-5">
                   <p className="text-xs uppercase tracking-wide text-[#7a808a]">CPU Load (1m)</p>
                   <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
@@ -298,6 +353,29 @@ function AdminDashboardPage() {
                       ? new Date(health.system.bootTimeIso).toLocaleString()
                       : "N/A"}
                   </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Database Ping</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
+                    {health?.database?.connected
+                      ? formatMilliseconds(health?.database?.pingMs)
+                      : "Disconnected"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(databasePingThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${databaseState.className}`}
+                  >
+                    {health?.database?.connected ? databaseState.label : "High"}
+                  </span>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    State: {health?.database?.state || "N/A"}
+                  </p>
+                  {health?.database?.error ? (
+                    <p className="mt-1 text-xs text-[#be3f3f]">{health.database.error}</p>
+                  ) : null}
                 </article>
               </div>
 
@@ -389,6 +467,186 @@ function AdminDashboardPage() {
                       <span className="text-[#7a808a]">External:</span>{" "}
                       {formatBytes(health?.process?.externalBytes)}
                     </p>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold text-[#1b1f24]">Application Analytics</h2>
+              <p className="text-xs text-[#7a808a]">
+                In-process request metrics with bounded memory and cached responses.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Requests / Second (1m)</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
+                    {formatNumber(oneMinuteTraffic?.requestsPerSecond, 3)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    1m requests: {oneMinuteTraffic?.requests ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    5m requests: {fiveMinuteTraffic?.requests ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Since start: {analytics?.traffic?.totalRequestsSinceStart ?? "N/A"}
+                  </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Error Rate (1m)</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
+                    {formatRate(oneMinuteTraffic?.errorRatePercentage)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(analyticsErrorRateThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${errorRateState.className}`}
+                  >
+                    {errorRateState.label}
+                  </span>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Errors (1m): {oneMinuteTraffic?.errors ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Errors since start: {analytics?.traffic?.totalErrorsSinceStart ?? "N/A"}
+                  </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">P95 Latency (1m)</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
+                    {formatMilliseconds(oneMinuteTraffic?.latencyPercentiles?.p95Ms)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(analyticsLatencyThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${latencyP95State.className}`}
+                  >
+                    {latencyP95State.label}
+                  </span>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    P99: {formatMilliseconds(oneMinuteTraffic?.latencyPercentiles?.p99Ms)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Avg: {formatMilliseconds(oneMinuteTraffic?.averageLatencyMs)}
+                  </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Event Loop Lag (P95)</p>
+                  <p className="mt-2 text-3xl font-semibold text-[#1f252b]">
+                    {formatMilliseconds(eventLoop?.p95Ms)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(analyticsEventLoopThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${eventLoopState.className}`}
+                  >
+                    {eventLoopState.label}
+                  </span>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    P50: {formatMilliseconds(eventLoop?.p50Ms)}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Max: {formatMilliseconds(eventLoop?.maxMs)}
+                  </p>
+                </article>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-3">
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Traffic Breakdown (1m)</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">2xx</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {oneMinuteTraffic?.statusBuckets?.["2xx"] ?? "N/A"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">4xx</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {oneMinuteTraffic?.statusBuckets?.["4xx"] ?? "N/A"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-2">
+                      <p className="text-[11px] uppercase text-[#7a808a]">5xx</p>
+                      <p className="mt-1 text-sm font-semibold text-[#1f252b]">
+                        {oneMinuteTraffic?.statusBuckets?.["5xx"] ?? "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-[#7a808a]">
+                    Config window: {analytics?.settings?.windowMinutes ?? "N/A"} min
+                  </p>
+                  <p className="mt-1 text-xs text-[#7a808a]">
+                    Slow threshold: {formatMilliseconds(analytics?.settings?.slowRequestThresholdMs)}
+                  </p>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Top Endpoints (5m)</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#3f464f]">
+                    {topEndpoints.length ? (
+                      topEndpoints.slice(0, 6).map((endpoint) => (
+                        <div
+                          key={`${endpoint.method}-${endpoint.path}`}
+                          className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
+                        >
+                          <p className="font-semibold text-[#1f252b]">
+                            {endpoint.method} {endpoint.path}
+                          </p>
+                          <p className="text-xs text-[#7a808a]">
+                            Requests: {endpoint.requests} | Avg: {formatMilliseconds(endpoint.averageLatencyMs)}
+                          </p>
+                          <p className="text-xs text-[#7a808a]">
+                            Error rate: {formatRate(endpoint.errorRatePercentage)} | Slow: {endpoint.slowRequests}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[#7a808a]">No endpoint data available yet.</p>
+                    )}
+                  </div>
+                </article>
+
+                <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <p className="text-xs uppercase tracking-wide text-[#7a808a]">Recent Slow Requests</p>
+                  <p className="mt-2 text-xs text-[#7a808a]">
+                    {buildSafeRangeText(analyticsSlowRequestThreshold)}
+                  </p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${slowRequestState.className}`}
+                  >
+                    {slowRequestState.label}
+                  </span>
+                  <div className="mt-3 space-y-2 text-sm text-[#3f464f]">
+                    {slowRequests.length ? (
+                      slowRequests.slice(0, 6).map((request) => (
+                        <div
+                          key={`${request.id}-${request.timestamp}`}
+                          className="rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3"
+                        >
+                          <p className="font-semibold text-[#1f252b]">
+                            {request.method} {request.path}
+                          </p>
+                          <p className="text-xs text-[#7a808a]">
+                            Duration: {formatMilliseconds(request.durationMs)} | Status: {request.statusCode}
+                          </p>
+                          <p className="text-xs text-[#7a808a]">
+                            Time: {new Date(request.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[#7a808a]">No slow requests in recent samples.</p>
+                    )}
                   </div>
                 </article>
               </div>
