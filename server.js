@@ -11,6 +11,7 @@ const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const { startMonitoring, runStatusCheck } = require("./services/monitorService");
 const { ensureAdminUser } = require("./services/userService");
+const { createRequestMetricsMiddleware } = require("./services/analyticsService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(createRequestMetricsMiddleware());
 //endpoints
 app.use("/api", statusRoutes);
 app.use("/api/auth", authRoutes);
