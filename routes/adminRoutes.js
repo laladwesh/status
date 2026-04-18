@@ -2,6 +2,7 @@ const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 const { getServerHealth } = require("../services/healthService");
 const { getSecurityReport } = require("../services/securityService");
+const { getApplicationAnalytics } = require("../services/analyticsService");
 
 const router = express.Router();
 
@@ -22,6 +23,15 @@ router.get("/security", async (req, res) => {
     return res.json(security);
   } catch (error) {
     return res.status(500).json({ message: "Failed to load security report." });
+  }
+});
+
+router.get("/analytics", async (req, res) => {
+  try {
+    const analytics = await getApplicationAnalytics();
+    return res.json(analytics);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to load analytics report." });
   }
 });
 
