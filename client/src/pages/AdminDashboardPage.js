@@ -91,6 +91,17 @@ const getMetricState = (value, threshold) => {
   };
 };
 
+const LOG_LINES_MIN = 20;
+const LOG_LINES_MAX = 2000;
+
+const clampLogLineCount = (value) => {
+  if (!Number.isFinite(value)) {
+    return 200;
+  }
+
+  return Math.max(LOG_LINES_MIN, Math.min(LOG_LINES_MAX, Math.floor(value)));
+};
+
 function AdminDashboardPage() {
   const navigate = useNavigate();
   const authUser = getAuthUser();
@@ -104,6 +115,14 @@ function AdminDashboardPage() {
     topProcesses: [],
     warnings: [],
   });
+  const [logApps, setLogApps] = useState([]);
+  const [selectedLogApp, setSelectedLogApp] = useState("");
+  const [logStreamType, setLogStreamType] = useState("combined");
+  const [logLineCount, setLogLineCount] = useState(200);
+  const [logPayload, setLogPayload] = useState(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState("");
+  const [liveLogStream, setLiveLogStream] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -128,6 +147,7 @@ function AdminDashboardPage() {
     normalizedLoadThreshold
   );
   const databaseState = getMetricState(health?.database?.pingMs, databasePingThreshold);
+  const swapEnabled = Boolean(health?.memory?.swap?.swapEnabled);
 
   const oneMinuteTraffic = analytics?.traffic?.oneMinute;
   const monitoredServices = analytics?.monitoredServices;
@@ -155,6 +175,9 @@ function AdminDashboardPage() {
     latestSlowRequestDurationMs,
     analyticsSlowRequestThreshold
   );
+
+  const stdoutLogLines = logPayload?.out?.lines || [];
+  const stderrLogLines = logPayload?.error?.lines || [];
 
   const handleLogout = () => {
     clearAuthSession();
@@ -188,12 +211,96 @@ function AdminDashboardPage() {
     }
   }, [navigate]);
 
+  const loadLogApps = useCallback(async () => {
+    try {
+      const response = await apiClient.get("/admin/logs/apps");
+      const apps = Array.isArray(response.data?.apps) ? response.data.apps : [];
+
+      setLogApps(apps);
+      setSelectedLogApp((current) => {
+        if (current && apps.includes(current)) {
+          return current;
+        }
+
+        return apps[0] || "";
+      });
+      setLogsError("");
+    } catch (err) {
+      if (err.response?.status === 401) {
+        clearAuthSession();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      setLogsError("Failed to load PM2 applications.");
+    }
+  }, [navigate]);
+
+  const loadLogs = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!selectedLogApp) {
+        setLogPayload(null);
+        return;
+      }
+
+      if (!silent) {
+        setLogsLoading(true);
+      }
+
+      try {
+        const response = await apiClient.get("/admin/logs", {
+          params: {
+            app: selectedLogApp,
+            stream: logStreamType,
+            lines: clampLogLineCount(logLineCount),
+          },
+        });
+
+        setLogPayload(response.data);
+        setLogsError("");
+      } catch (err) {
+        if (err.response?.status === 401) {
+          clearAuthSession();
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        setLogsError(err.response?.data?.message || "Failed to load PM2 logs.");
+      } finally {
+        if (!silent) {
+          setLogsLoading(false);
+        }
+      }
+    },
+    [selectedLogApp, logStreamType, logLineCount, navigate]
+  );
+
   useEffect(() => {
     loadDashboard();
 
     const intervalId = setInterval(loadDashboard, 60000);
     return () => clearInterval(intervalId);
   }, [loadDashboard]);
+
+  useEffect(() => {
+    loadLogApps();
+  }, [loadLogApps]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  useEffect(() => {
+    if (!liveLogStream || !selectedLogApp) {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
+      loadLogs({ silent: true });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [liveLogStream, selectedLogApp, loadLogs]);
 
   return (
     <main className="min-h-screen bg-[#f1f3f5] px-4 py-8 sm:px-6 lg:px-8">
@@ -310,14 +417,16 @@ function AdminDashboardPage() {
                     {formatBytes(health?.memory?.usedBytes)} / {formatBytes(health?.memory?.totalBytes)}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
-                    {health?.memory?.swap?.available
+                    {swapEnabled
                       ? `Swap: ${formatBytes(health.memory.swap.usedBytes)} / ${formatBytes(
                           health.memory.swap.totalBytes
                         )}`
                       : "Swap: Disabled or unavailable"}
                   </p>
                   <p className="mt-1 text-xs text-[#7a808a]">
-                    {buildSafeRangeText(swapThreshold)} | Swap state: {swapState.label}
+                    {swapEnabled
+                      ? `${buildSafeRangeText(swapThreshold)} | Swap state: ${swapState.label}`
+                      : "Swap state: Disabled"}
                   </p>
                 </article>
 
@@ -661,6 +770,144 @@ function AdminDashboardPage() {
                     )}
                   </div>
                 </article>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold text-[#1b1f24]">Application Logs (PM2)</h2>
+              <p className="text-xs text-[#7a808a]">
+                View logs app by app, choose stream type, and enable live refresh every 5 seconds.
+              </p>
+
+              {logsError ? (
+                <div className="rounded-md border border-[#f2b8b8] bg-[#fff1f1] p-4 text-sm text-[#be3f3f]">
+                  {logsError}
+                </div>
+              ) : null}
+
+              <div className="rounded-md border border-[#d9dde2] bg-white p-5">
+                <div className="flex flex-wrap items-end gap-4">
+                  <label className="space-y-1 text-sm text-[#2c3138]">
+                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Application</span>
+                    <select
+                      value={selectedLogApp}
+                      onChange={(event) => setSelectedLogApp(event.target.value)}
+                      className="rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                    >
+                      {logApps.length ? (
+                        logApps.map((appName) => (
+                          <option key={appName} value={appName}>
+                            {appName}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No apps found</option>
+                      )}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm text-[#2c3138]">
+                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Stream</span>
+                    <select
+                      value={logStreamType}
+                      onChange={(event) => setLogStreamType(event.target.value)}
+                      className="rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                    >
+                      <option value="combined">Combined</option>
+                      <option value="out">Stdout</option>
+                      <option value="error">Stderr</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm text-[#2c3138]">
+                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Lines</span>
+                    <input
+                      type="number"
+                      min={LOG_LINES_MIN}
+                      max={LOG_LINES_MAX}
+                      value={logLineCount}
+                      onChange={(event) => {
+                        const parsed = Number.parseInt(event.target.value, 10);
+                        setLogLineCount(clampLogLineCount(parsed));
+                      }}
+                      className="w-28 rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => loadLogs()}
+                    disabled={!selectedLogApp || logsLoading}
+                    className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {logsLoading ? "Loading..." : "Refresh Logs"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLiveLogStream((current) => !current)}
+                    disabled={!selectedLogApp}
+                    className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {liveLogStream ? "Stop Live" : "Start Live"}
+                  </button>
+                </div>
+
+                <p className="mt-3 text-xs text-[#7a808a]">
+                  Apps: {logApps.length} | Live refresh: {liveLogStream ? "On (5s)" : "Off"}
+                </p>
+
+                {logPayload?.warnings?.length ? (
+                  <div className="mt-3 rounded-md border border-[#f3d489] bg-[#fff8e7] p-3 text-xs text-[#9c6d00]">
+                    {logPayload.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                {logStreamType !== "error" ? (
+                  <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">Stdout</h3>
+                      <p className="text-xs text-[#7a808a]">Lines: {logPayload?.out?.lineCount ?? 0}</p>
+                    </div>
+                    <p className="mt-2 text-xs text-[#7a808a] break-all">
+                      Source: {logPayload?.out?.path || "N/A"}
+                    </p>
+                    {logPayload?.out?.readError ? (
+                      <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.out.readError}</p>
+                    ) : null}
+                    <pre className="mt-3 max-h-96 overflow-auto rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3 text-xs text-[#2c3138] whitespace-pre-wrap break-words">
+                      {stdoutLogLines.length ? stdoutLogLines.join("\n") : "No stdout lines available."}
+                    </pre>
+                    {logPayload?.out?.truncated ? (
+                      <p className="mt-2 text-xs text-[#7a808a]">Showing recent lines only.</p>
+                    ) : null}
+                  </article>
+                ) : null}
+
+                {logStreamType !== "out" ? (
+                  <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">Stderr</h3>
+                      <p className="text-xs text-[#7a808a]">Lines: {logPayload?.error?.lineCount ?? 0}</p>
+                    </div>
+                    <p className="mt-2 text-xs text-[#7a808a] break-all">
+                      Source: {logPayload?.error?.path || "N/A"}
+                    </p>
+                    {logPayload?.error?.readError ? (
+                      <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.error.readError}</p>
+                    ) : null}
+                    <pre className="mt-3 max-h-96 overflow-auto rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3 text-xs text-[#2c3138] whitespace-pre-wrap break-words">
+                      {stderrLogLines.length ? stderrLogLines.join("\n") : "No stderr lines available."}
+                    </pre>
+                    {logPayload?.error?.truncated ? (
+                      <p className="mt-2 text-xs text-[#7a808a]">Showing recent lines only.</p>
+                    ) : null}
+                  </article>
+                ) : null}
               </div>
             </section>
 
