@@ -303,9 +303,9 @@ function AdminDashboardPage() {
   }, [liveLogStream, selectedLogApp, loadLogs]);
 
   return (
-    <main className="min-h-screen bg-[#f1f3f5] px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="rounded-md border border-[#d9dde2] bg-white p-6">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e8f4ff_0%,_#f2f7ff_42%,_#eef2ff_100%)] px-3 py-6 sm:px-5 lg:px-8">
+      <div className="mx-auto w-full space-y-6">
+        <header className="rounded-2xl border border-[#c9d8ff] bg-gradient-to-r from-white via-[#f7fbff] to-[#edf3ff] p-6 shadow-[0_10px_30px_rgba(56,97,168,0.08)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7a808a]">
@@ -355,13 +355,13 @@ function AdminDashboardPage() {
         </header>
 
         {error ? (
-          <section className="rounded-md border border-[#f2b8b8] bg-[#fff1f1] p-4 text-sm text-[#be3f3f]">
+          <section className="rounded-xl border border-[#f7c7c7] bg-[#fff4f4] p-4 text-sm text-[#be3f3f] shadow-sm">
             {error}
           </section>
         ) : null}
 
         {loading ? (
-          <section className="rounded-md border border-[#d9dde2] bg-white p-8 text-center text-[#7a808a]">
+          <section className="rounded-xl border border-[#d5def5] bg-white p-8 text-center text-[#65708a] shadow-sm">
             Loading admin data...
           </section>
         ) : null}
@@ -773,26 +773,26 @@ function AdminDashboardPage() {
               </div>
             </section>
 
-            <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-[#1b1f24]">Application Logs (PM2)</h2>
-              <p className="text-xs text-[#7a808a]">
+            <section className="space-y-5 rounded-2xl border border-[#c9d8ff] bg-gradient-to-b from-[#ffffff] to-[#f3f8ff] p-5 shadow-[0_10px_25px_rgba(56,97,168,0.08)]">
+              <h2 className="text-2xl font-semibold text-[#183a7a]">Application Logs (PM2)</h2>
+              <p className="text-sm text-[#48608a]">
                 View logs app by app, choose stream type, and enable live refresh every 5 seconds.
               </p>
 
               {logsError ? (
-                <div className="rounded-md border border-[#f2b8b8] bg-[#fff1f1] p-4 text-sm text-[#be3f3f]">
+                <div className="rounded-xl border border-[#f4bebe] bg-[#fff2f2] p-4 text-sm text-[#b83d3d] shadow-sm">
                   {logsError}
                 </div>
               ) : null}
 
-              <div className="rounded-md border border-[#d9dde2] bg-white p-5">
+              <div className="rounded-xl border border-[#bfd3ff] bg-[linear-gradient(180deg,_#ffffff_0%,_#f6f9ff_100%)] p-5 shadow-sm">
                 <div className="flex flex-wrap items-end gap-4">
                   <label className="space-y-1 text-sm text-[#2c3138]">
-                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Application</span>
+                    <span className="block text-xs uppercase tracking-wide text-[#4d6694]">Application</span>
                     <select
                       value={selectedLogApp}
                       onChange={(event) => setSelectedLogApp(event.target.value)}
-                      className="rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                      className="rounded-lg border border-[#b9cfff] bg-white px-3 py-2 text-sm text-[#1f252b] shadow-sm outline-none transition focus:border-[#6e95ff] focus:ring-2 focus:ring-[#d5e3ff]"
                     >
                       {logApps.length ? (
                         logApps.map((appName) => (
@@ -807,11 +807,11 @@ function AdminDashboardPage() {
                   </label>
 
                   <label className="space-y-1 text-sm text-[#2c3138]">
-                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Stream</span>
+                    <span className="block text-xs uppercase tracking-wide text-[#4d6694]">Stream</span>
                     <select
                       value={logStreamType}
                       onChange={(event) => setLogStreamType(event.target.value)}
-                      className="rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                      className="rounded-lg border border-[#b9cfff] bg-white px-3 py-2 text-sm text-[#1f252b] shadow-sm outline-none transition focus:border-[#6e95ff] focus:ring-2 focus:ring-[#d5e3ff]"
                     >
                       <option value="combined">Combined</option>
                       <option value="out">Stdout</option>
@@ -820,7 +820,7 @@ function AdminDashboardPage() {
                   </label>
 
                   <label className="space-y-1 text-sm text-[#2c3138]">
-                    <span className="block text-xs uppercase tracking-wide text-[#7a808a]">Lines</span>
+                    <span className="block text-xs uppercase tracking-wide text-[#4d6694]">Lines</span>
                     <input
                       type="number"
                       min={LOG_LINES_MIN}
@@ -830,7 +830,7 @@ function AdminDashboardPage() {
                         const parsed = Number.parseInt(event.target.value, 10);
                         setLogLineCount(clampLogLineCount(parsed));
                       }}
-                      className="w-28 rounded-md border border-[#d4d7dc] bg-white px-3 py-2 text-sm text-[#1f252b]"
+                      className="w-28 rounded-lg border border-[#b9cfff] bg-white px-3 py-2 text-sm text-[#1f252b] shadow-sm outline-none transition focus:border-[#6e95ff] focus:ring-2 focus:ring-[#d5e3ff]"
                     />
                   </label>
 
@@ -838,7 +838,7 @@ function AdminDashboardPage() {
                     type="button"
                     onClick={() => loadLogs()}
                     disabled={!selectedLogApp || logsLoading}
-                    className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-[#5f8dff] bg-[#2e6cff] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#245fe9] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {logsLoading ? "Loading..." : "Refresh Logs"}
                   </button>
@@ -847,18 +847,22 @@ function AdminDashboardPage() {
                     type="button"
                     onClick={() => setLiveLogStream((current) => !current)}
                     disabled={!selectedLogApp}
-                    className="rounded-md border border-[#d4d7dc] bg-white px-4 py-2 text-sm font-medium text-[#2c3138] transition hover:border-[#aeb5be] disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      liveLogStream
+                        ? "border-[#2f9e75] bg-[#e8f9f2] text-[#157257] hover:bg-[#daf4ea]"
+                        : "border-[#7ea7ff] bg-[#edf4ff] text-[#2c58b8] hover:bg-[#e3edff]"
+                    }`}
                   >
                     {liveLogStream ? "Stop Live" : "Start Live"}
                   </button>
                 </div>
 
-                <p className="mt-3 text-xs text-[#7a808a]">
+                <p className="mt-3 text-xs text-[#5a7097]">
                   Apps: {logApps.length} | Live refresh: {liveLogStream ? "On (5s)" : "Off"}
                 </p>
 
                 {logPayload?.warnings?.length ? (
-                  <div className="mt-3 rounded-md border border-[#f3d489] bg-[#fff8e7] p-3 text-xs text-[#9c6d00]">
+                  <div className="mt-3 rounded-lg border border-[#f2d08a] bg-[#fff7e2] p-3 text-xs text-[#8f6300]">
                     {logPayload.warnings.map((warning) => (
                       <p key={warning}>{warning}</p>
                     ))}
@@ -868,43 +872,43 @@ function AdminDashboardPage() {
 
               <div className="grid gap-4 lg:grid-cols-2">
                 {logStreamType !== "error" ? (
-                  <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <article className="rounded-xl border border-[#bfe8d8] bg-[linear-gradient(180deg,_#ffffff_0%,_#f1fcf7_100%)] p-5 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">Stdout</h3>
-                      <p className="text-xs text-[#7a808a]">Lines: {logPayload?.out?.lineCount ?? 0}</p>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#1d6f57]">Stdout</h3>
+                      <p className="text-xs text-[#4d7a6d]">Lines: {logPayload?.out?.lineCount ?? 0}</p>
                     </div>
-                    <p className="mt-2 text-xs text-[#7a808a] break-all">
+                    <p className="mt-2 text-xs text-[#4d7a6d] break-all">
                       Source: {logPayload?.out?.path || "N/A"}
                     </p>
                     {logPayload?.out?.readError ? (
                       <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.out.readError}</p>
                     ) : null}
-                    <pre className="mt-3 max-h-96 overflow-auto rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3 text-xs text-[#2c3138] whitespace-pre-wrap break-words">
+                    <pre className="mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#17362d] bg-[#0f1f1a] p-4 font-mono text-sm leading-6 text-[#d7f9eb] whitespace-pre-wrap break-words">
                       {stdoutLogLines.length ? stdoutLogLines.join("\n") : "No stdout lines available."}
                     </pre>
                     {logPayload?.out?.truncated ? (
-                      <p className="mt-2 text-xs text-[#7a808a]">Showing recent lines only.</p>
+                      <p className="mt-2 text-xs text-[#4d7a6d]">Showing recent lines only.</p>
                     ) : null}
                   </article>
                 ) : null}
 
                 {logStreamType !== "out" ? (
-                  <article className="rounded-md border border-[#d9dde2] bg-white p-5">
+                  <article className="rounded-xl border border-[#f0c6cf] bg-[linear-gradient(180deg,_#ffffff_0%,_#fff4f6_100%)] p-5 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#2b3138]">Stderr</h3>
-                      <p className="text-xs text-[#7a808a]">Lines: {logPayload?.error?.lineCount ?? 0}</p>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#9b3048]">Stderr</h3>
+                      <p className="text-xs text-[#8b5260]">Lines: {logPayload?.error?.lineCount ?? 0}</p>
                     </div>
-                    <p className="mt-2 text-xs text-[#7a808a] break-all">
+                    <p className="mt-2 text-xs text-[#8b5260] break-all">
                       Source: {logPayload?.error?.path || "N/A"}
                     </p>
                     {logPayload?.error?.readError ? (
                       <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.error.readError}</p>
                     ) : null}
-                    <pre className="mt-3 max-h-96 overflow-auto rounded-md border border-[#eceff3] bg-[#f7f8fa] p-3 text-xs text-[#2c3138] whitespace-pre-wrap break-words">
+                    <pre className="mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#3d1a23] bg-[#1f0f14] p-4 font-mono text-sm leading-6 text-[#ffd9e1] whitespace-pre-wrap break-words">
                       {stderrLogLines.length ? stderrLogLines.join("\n") : "No stderr lines available."}
                     </pre>
                     {logPayload?.error?.truncated ? (
-                      <p className="mt-2 text-xs text-[#7a808a]">Showing recent lines only.</p>
+                      <p className="mt-2 text-xs text-[#8b5260]">Showing recent lines only.</p>
                     ) : null}
                   </article>
                 ) : null}
