@@ -93,6 +93,58 @@ const getCpuSpeedFromLscpu = async () => {
   return null;
 };
 
+const getCpuSpeedFromProcCpuinfo = async () => {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const result = await executeFile("cat", ["/proc/cpuinfo"]);
+  if (!result.ok || !result.output) {
+    return null;
+  }
+
+  const matches = [...result.output.matchAll(/cpu MHz\s*:\s*(\d+(\.\d+)?)/gi)];
+  if (!matches.length) {
+    return null;
+  }
+
+  const values = matches
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!values.length) {
+    return null;
+  }
+
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.round(average);
+};
+
+const getCpuSpeedFromSysfs = async () => {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const candidatePaths = [
+    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
+    "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
+  ];
+
+  for (const filePath of candidatePaths) {
+    const result = await executeFile("cat", [filePath]);
+    if (!result.ok || !result.output) {
+      continue;
+    }
+
+    const rawValue = Number(result.output.split(/\s+/)[0]);
+    if (Number.isFinite(rawValue) && rawValue > 0) {
+      return Math.round(rawValue / 1000);
+    }
+  }
+
+  return null;
+};
+
 const getCpuStaticInfo = async () => {
   if (cpuStaticInfoCache) {
     return cpuStaticInfoCache;
@@ -113,6 +165,14 @@ const getCpuStaticInfo = async () => {
 
     if (!averageSpeedMHz || averageSpeedMHz <= 0) {
       averageSpeedMHz = await getCpuSpeedFromLscpu();
+    }
+
+    if (!averageSpeedMHz || averageSpeedMHz <= 0) {
+      averageSpeedMHz = await getCpuSpeedFromProcCpuinfo();
+    }
+
+    if (!averageSpeedMHz || averageSpeedMHz <= 0) {
+      averageSpeedMHz = await getCpuSpeedFromSysfs();
     }
 
     cpuStaticInfoCache = {
@@ -243,14 +303,15 @@ const getSwapUsage = async () => {
   const totalBytes = Number(parts[1]);
   const usedBytes = Number(parts[2]);
   const freeBytes = Number(parts[3]);
+  const swapEnabled = totalBytes > 0;
 
   return {
-    available: true,
-    swapEnabled: totalBytes > 0,
+    available: swapEnabled,
+    swapEnabled,
     totalBytes,
     usedBytes,
     freeBytes,
-    usagePercentage: percentage(usedBytes, totalBytes),
+    usagePercentage: swapEnabled ? percentage(usedBytes, totalBytes) : null,
   };
 };
 
