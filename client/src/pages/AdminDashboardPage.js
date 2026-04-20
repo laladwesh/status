@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
 import StatusCard from "../components/StatusCard";
@@ -93,6 +93,70 @@ const getMetricState = (value, threshold) => {
 
 const LOG_LINES_MIN = 20;
 const LOG_LINES_MAX = 2000;
+const LOG_FOLLOW_BOTTOM_THRESHOLD_PX = 20;
+
+const ANSI_COLOR_CLASS_BY_CODE = {
+  "30": "text-[#7f8a96]",
+  "31": "text-[#ff7b7b]",
+  "32": "text-[#53db8f]",
+  "33": "text-[#ffd166]",
+  "34": "text-[#59a3ff]",
+  "35": "text-[#d19bff]",
+  "36": "text-[#4fd8ff]",
+  "37": "text-[#dce5f0]",
+  "90": "text-[#9aa9bc]",
+  "91": "text-[#ff9a9a]",
+  "92": "text-[#89f3b4]",
+  "93": "text-[#ffe08a]",
+  "94": "text-[#8bc2ff]",
+  "95": "text-[#e3bdff]",
+  "96": "text-[#9ce9ff]",
+  "97": "text-[#f6fbff]",
+};
+
+const tokenizeAnsiLikeLine = (line, baseClassName) => {
+  const segments = [];
+  const regex = /\[(0|39|30|31|32|33|34|35|36|37|90|91|92|93|94|95|96|97)m/g;
+
+  let activeClassName = baseClassName;
+  let cursor = 0;
+  let match = regex.exec(line);
+
+  while (match) {
+    if (match.index > cursor) {
+      segments.push({
+        text: line.slice(cursor, match.index),
+        className: activeClassName,
+      });
+    }
+
+    const code = match[1];
+    if (code === "0" || code === "39") {
+      activeClassName = baseClassName;
+    } else {
+      activeClassName = ANSI_COLOR_CLASS_BY_CODE[code] || activeClassName;
+    }
+
+    cursor = match.index + match[0].length;
+    match = regex.exec(line);
+  }
+
+  if (cursor < line.length) {
+    segments.push({
+      text: line.slice(cursor),
+      className: activeClassName,
+    });
+  }
+
+  if (!segments.length) {
+    segments.push({
+      text: line,
+      className: baseClassName,
+    });
+  }
+
+  return segments;
+};
 
 const clampLogLineCount = (value) => {
   if (!Number.isFinite(value)) {
@@ -101,6 +165,125 @@ const clampLogLineCount = (value) => {
 
   return Math.max(LOG_LINES_MIN, Math.min(LOG_LINES_MAX, Math.floor(value)));
 };
+
+function LogStreamPanel({
+  title,
+  lineCount,
+  sourcePath,
+  readError,
+  lines,
+  truncated,
+  liveMode,
+  variant,
+}) {
+  const viewportRef = useRef(null);
+  const [stickToBottom, setStickToBottom] = useState(true);
+
+  const isNearBottom = useCallback(() => {
+    const element = viewportRef.current;
+    if (!element) {
+      return true;
+    }
+
+    const remainingDistance = element.scrollHeight - element.scrollTop - element.clientHeight;
+    return remainingDistance <= LOG_FOLLOW_BOTTOM_THRESHOLD_PX;
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const element = viewportRef.current;
+    if (!element) {
+      return;
+    }
+
+    element.scrollTop = element.scrollHeight;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    setStickToBottom(isNearBottom());
+  }, [isNearBottom]);
+
+  useEffect(() => {
+    if (stickToBottom) {
+      scrollToBottom();
+    }
+  }, [lines, stickToBottom, scrollToBottom]);
+
+  useEffect(() => {
+    setStickToBottom(true);
+  }, [sourcePath, title]);
+
+  const shellClassName =
+    variant === "stderr"
+      ? "rounded-xl border border-[#f0c6cf] bg-[linear-gradient(180deg,_#ffffff_0%,_#fff4f6_100%)] p-5 shadow-sm"
+      : "rounded-xl border border-[#bfe8d8] bg-[linear-gradient(180deg,_#ffffff_0%,_#f1fcf7_100%)] p-5 shadow-sm";
+
+  const titleClassName =
+    variant === "stderr"
+      ? "text-sm font-semibold uppercase tracking-wide text-[#9b3048]"
+      : "text-sm font-semibold uppercase tracking-wide text-[#1d6f57]";
+
+  const metaClassName = variant === "stderr" ? "text-xs text-[#8b5260]" : "text-xs text-[#4d7a6d]";
+
+  const consoleClassName =
+    variant === "stderr"
+      ? "mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#3d1a23] bg-[#1f0f14] p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words"
+      : "mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#17362d] bg-[#0f1f1a] p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words";
+
+  const baseTextClassName = variant === "stderr" ? "text-[#ffd9e1]" : "text-[#d7f9eb]";
+
+  return (
+    <article className={shellClassName}>
+      <div className="flex items-center justify-between">
+        <h3 className={titleClassName}>{title}</h3>
+        <p className={metaClassName}>Lines: {lineCount ?? 0}</p>
+      </div>
+      <p className={`mt-2 break-all ${metaClassName}`}>Source: {sourcePath || "N/A"}</p>
+      {readError ? <p className="mt-2 text-xs text-[#be3f3f]">{readError}</p> : null}
+
+      <div className="relative">
+        <div ref={viewportRef} onScroll={handleScroll} className={consoleClassName}>
+          {lines.length ? (
+            lines.map((line, index) => {
+              const segments = tokenizeAnsiLikeLine(line, baseTextClassName);
+
+              return (
+                <div key={`${title}-${index}-${line.length}`} className="whitespace-pre-wrap break-words">
+                  {segments.map((segment, segmentIndex) => (
+                    <span key={`${title}-${index}-${segmentIndex}`} className={segment.className}>
+                      {segment.text}
+                    </span>
+                  ))}
+                </div>
+              );
+            })
+          ) : (
+            <div className={baseTextClassName}>No {variant === "stderr" ? "stderr" : "stdout"} lines available.</div>
+          )}
+        </div>
+
+        {liveMode ? (
+          <button
+            type="button"
+            onClick={() => {
+              scrollToBottom();
+              setStickToBottom(true);
+            }}
+            className={`absolute bottom-3 right-3 rounded-full border px-3 py-1 text-[11px] font-semibold shadow-sm transition ${
+              stickToBottom
+                ? "cursor-default border-[#2f9e75] bg-[#e8f9f2] text-[#157257]"
+                : "border-[#7ea7ff] bg-[#edf4ff] text-[#2c58b8] hover:bg-[#e3edff]"
+            }`}
+            disabled={stickToBottom}
+          >
+            {stickToBottom ? "Following latest" : "Jump to latest"}
+          </button>
+        ) : null}
+      </div>
+
+      {truncated ? <p className={`mt-2 ${metaClassName}`}>Showing recent lines only.</p> : null}
+    </article>
+  );
+}
 
 function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -860,6 +1043,9 @@ function AdminDashboardPage() {
                 <p className="mt-3 text-xs text-[#5a7097]">
                   Apps: {logApps.length} | Live refresh: {liveLogStream ? "On (5s)" : "Off"}
                 </p>
+                <p className="mt-1 text-xs text-[#5a7097]">
+                  In live mode, logs follow to bottom until you scroll up. Use the bottom button to jump back.
+                </p>
 
                 {logPayload?.warnings?.length ? (
                   <div className="mt-3 rounded-lg border border-[#f2d08a] bg-[#fff7e2] p-3 text-xs text-[#8f6300]">
@@ -872,45 +1058,29 @@ function AdminDashboardPage() {
 
               <div className="grid gap-4 lg:grid-cols-2">
                 {logStreamType !== "error" ? (
-                  <article className="rounded-xl border border-[#bfe8d8] bg-[linear-gradient(180deg,_#ffffff_0%,_#f1fcf7_100%)] p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#1d6f57]">Stdout</h3>
-                      <p className="text-xs text-[#4d7a6d]">Lines: {logPayload?.out?.lineCount ?? 0}</p>
-                    </div>
-                    <p className="mt-2 text-xs text-[#4d7a6d] break-all">
-                      Source: {logPayload?.out?.path || "N/A"}
-                    </p>
-                    {logPayload?.out?.readError ? (
-                      <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.out.readError}</p>
-                    ) : null}
-                    <pre className="mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#17362d] bg-[#0f1f1a] p-4 font-mono text-sm leading-6 text-[#d7f9eb] whitespace-pre-wrap break-words">
-                      {stdoutLogLines.length ? stdoutLogLines.join("\n") : "No stdout lines available."}
-                    </pre>
-                    {logPayload?.out?.truncated ? (
-                      <p className="mt-2 text-xs text-[#4d7a6d]">Showing recent lines only.</p>
-                    ) : null}
-                  </article>
+                  <LogStreamPanel
+                    title="Stdout"
+                    lineCount={logPayload?.out?.lineCount ?? 0}
+                    sourcePath={logPayload?.out?.path || "N/A"}
+                    readError={logPayload?.out?.readError || null}
+                    lines={stdoutLogLines}
+                    truncated={Boolean(logPayload?.out?.truncated)}
+                    liveMode={liveLogStream}
+                    variant="stdout"
+                  />
                 ) : null}
 
                 {logStreamType !== "out" ? (
-                  <article className="rounded-xl border border-[#f0c6cf] bg-[linear-gradient(180deg,_#ffffff_0%,_#fff4f6_100%)] p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-[#9b3048]">Stderr</h3>
-                      <p className="text-xs text-[#8b5260]">Lines: {logPayload?.error?.lineCount ?? 0}</p>
-                    </div>
-                    <p className="mt-2 text-xs text-[#8b5260] break-all">
-                      Source: {logPayload?.error?.path || "N/A"}
-                    </p>
-                    {logPayload?.error?.readError ? (
-                      <p className="mt-2 text-xs text-[#be3f3f]">{logPayload.error.readError}</p>
-                    ) : null}
-                    <pre className="mt-3 max-h-[32rem] overflow-auto rounded-lg border border-[#3d1a23] bg-[#1f0f14] p-4 font-mono text-sm leading-6 text-[#ffd9e1] whitespace-pre-wrap break-words">
-                      {stderrLogLines.length ? stderrLogLines.join("\n") : "No stderr lines available."}
-                    </pre>
-                    {logPayload?.error?.truncated ? (
-                      <p className="mt-2 text-xs text-[#8b5260]">Showing recent lines only.</p>
-                    ) : null}
-                  </article>
+                  <LogStreamPanel
+                    title="Stderr"
+                    lineCount={logPayload?.error?.lineCount ?? 0}
+                    sourcePath={logPayload?.error?.path || "N/A"}
+                    readError={logPayload?.error?.readError || null}
+                    lines={stderrLogLines}
+                    truncated={Boolean(logPayload?.error?.truncated)}
+                    liveMode={liveLogStream}
+                    variant="stderr"
+                  />
                 ) : null}
               </div>
             </section>
