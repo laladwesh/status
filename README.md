@@ -64,6 +64,13 @@ MONGO_URI=mongodb://127.0.0.1:27017/status_dashboard
 JWT_SECRET=change-this-to-a-long-random-secret
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-this-password
+PM2_LOGS_DIR=/home/ubuntu/.pm2/logs
+PM2_LOG_DEFAULT_LINES=200
+PM2_LOG_MAX_LINES=2000
+PM2_LOG_READ_CHUNK_BYTES=262144
+PM2_LOG_MAX_READ_BYTES=1048576
+PM2_LOGS_CACHE_TTL_MS=3000
+PM2_APPS_CACHE_TTL_MS=15000
 ```
 
 ## Development
