@@ -3,6 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
 import StatusCard from "../components/StatusCard";
 import { clearAuthSession, getAuthUser } from "../utils/auth";
+import { useWebSocket } from '../hooks/useWebSocket';
+import LiveMetricsCharts from '../components/LiveMetricsCharts';
+import MetricsHistoryChart from '../components/MetricsHistoryChart';
+import IncidentAdminPanel from '../components/IncidentAdminPanel';
+import ServiceManagerPanel from '../components/ServiceManagerPanel';
+import SslCertPanel from '../components/SslCertPanel';
+import AlertConfigPanel from '../components/AlertConfigPanel';
+import AuditLogPanel from '../components/AuditLogPanel';
 
 const formatBytes = (bytes) => {
   if (!bytes && bytes !== 0) {
@@ -308,6 +316,8 @@ function AdminDashboardPage() {
   const [liveLogStream, setLiveLogStream] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { metrics, connected } = useWebSocket(true);
+  const [activeAdvancedTab, setActiveAdvancedTab] = useState('Metrics History');
 
   const cpuThreshold = health?.thresholds?.cpuLoadPercentage;
   const memoryThreshold = health?.thresholds?.memoryUsagePercentage;
@@ -488,6 +498,7 @@ function AdminDashboardPage() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e8f4ff_0%,_#f2f7ff_42%,_#eef2ff_100%)] px-3 py-6 sm:px-5 lg:px-8">
       <div className="mx-auto w-full space-y-6">
+        <LiveMetricsCharts metrics={metrics} connected={connected} />
         <header className="rounded-2xl border border-[#c9d8ff] bg-gradient-to-r from-white via-[#f7fbff] to-[#edf3ff] p-6 shadow-[0_10px_30px_rgba(56,97,168,0.08)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1168,6 +1179,31 @@ function AdminDashboardPage() {
             </section>
           </>
         ) : null}
+
+        <div className="mt-8">
+          <div className="flex flex-wrap gap-1 mb-4 border-b border-[#d9dde2]">
+            {['Metrics History','Incidents','Services','SSL Certs','Alerts','Audit Log'].map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveAdvancedTab(tab)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  activeAdvancedTab === tab
+                    ? 'border-[#4f46e5] text-[#4f46e5]'
+                    : 'border-transparent text-[#7a808a] hover:text-[#2c3138]'
+                }`}
+              >{tab}</button>
+            ))}
+          </div>
+          <div className="mt-4">
+            {activeAdvancedTab === 'Metrics History' && <MetricsHistoryChart />}
+            {activeAdvancedTab === 'Incidents' && <IncidentAdminPanel />}
+            {activeAdvancedTab === 'Services' && <ServiceManagerPanel />}
+            {activeAdvancedTab === 'SSL Certs' && <SslCertPanel />}
+            {activeAdvancedTab === 'Alerts' && <AlertConfigPanel />}
+            {activeAdvancedTab === 'Audit Log' && <AuditLogPanel />}
+          </div>
+        </div>
       </div>
     </main>
   );

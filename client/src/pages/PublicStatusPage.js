@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import apiClient from "../api/client";
 import StatusTimelineRow from "../components/StatusTimelineRow";
+import IncidentBanner from "../components/IncidentBanner";
 
 function PublicStatusPage() {
   const [services, setServices] = useState([]);
@@ -97,11 +98,14 @@ function PublicStatusPage() {
         ) : null}
 
         {!loading ? (
-          <section className="overflow-visible rounded-md border border-[#d9dde2] bg-white">
-            {services.map((service) => (
-              <StatusTimelineRow key={service.name} service={service} />
-            ))}
-          </section>
+          <>
+            <IncidentBanner />
+            <section className="overflow-visible rounded-md border border-[#d9dde2] bg-white">
+              {services.map((service) => (
+                <StatusTimelineRow key={service.name} service={service} />
+              ))}
+            </section>
+          </>
         ) : null}
       </div>
     </main>
