@@ -1,4 +1,4 @@
-# Status + Monitoring Dashboard (MERN Monorepo)
+# Status + Monitoring Dashboard
 
 Production-ready monorepo for public service status and protected infrastructure monitoring.
 
